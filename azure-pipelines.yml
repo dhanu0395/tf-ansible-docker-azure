@@ -1,0 +1,54 @@
+trigger: none
+
+pool:
+  name: LinuxPool
+
+variables:
+  TF_WORKING_DIR: 'virtualMachine'
+
+stages:
+  - stage: infra
+    jobs:
+      - job: terraformJob
+        displayName: "Provision Infrastructure with Terraform"
+        steps:
+          - checkout: self
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(TF_WORKING_DIR)'
+              backendServiceArm: 'DjAzureSPNConnection'
+              backendAzureRmStorageAccountName: 'dhanustorage03'
+              backendAzureRmContainerName: 'dhanucontainer'
+              backendAzureRmKey: 'vmstorage.tfstate'
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(TF_WORKING_DIR)'
+              environmentServiceNameAzureRM: 'DjAzureSPNConnection'
+          - task: TerraformTask@5
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: '$(TF_WORKING_DIR)'
+              environmentServiceNameAzureRM: 'DjAzureSPNConnection'
+          - script: |
+              cd $(TF_WORKING_DIR)
+              mkdir -p /home/dhanu/shared/ansible
+              terraform output -raw ansible_inventory > /home/dhanu/shared/ansible/inventory.ini
+              ls
+  - stage: config
+    dependsOn: infra
+    jobs:
+      - job: ansibleJob
+        displayName: "Configure VMs with Ansible"
+        steps:
+          - checkout: self
+
+          - script: |
+              export ANSIBLE_HOST_KEY_CHECKING=False
+              ansible-playbook -i /home/dhanu/shared/ansible/inventory.ini ansible/playbook.yml
+            displayName: "Run Ansible Playbook"       
+
