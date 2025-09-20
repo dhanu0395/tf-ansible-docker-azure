@@ -39,7 +39,16 @@ stages:
               cd $(working-directory)
               mkdir -p /home/dhanu/shared/ansible
               terraform output -raw ansible_inventory > /home/dhanu/shared/ansible/inventory.ini
-              ls
+          
+          - script: |
+              cd $(working-directory)
+              terraform output -raw vm_ip > $(Pipeline.Workspace)/vm_ip.txt
+              echo "VM IP saved to $(Pipeline.Workspace)/vm_ip.txt"
+            displayName: "Save VM IP to file"
+          - publish: $(Pipeline.Workspace)/vm_ip.txt
+            artifact: vm_ip
+            displayName: "Publish VM IP"
+
   - stage: config
     dependsOn: infra
     jobs:
@@ -85,9 +94,12 @@ stages:
               SecretsFilter: 'vmpassword,dockerPassword'
               RunAsPreJob: true
           - script: |
-              sshpass -p '$(vmpassword)' ssh -o StrictHostKeyChecking=no azureuser@$(terraform output -raw vm_ip) "
+              VM_IP=$(cat $(Pipeline.Workspace)/vm_ip.txt)
+              echo "Using VM IP: $VM_IP"
+
+              sshpass -p "$(vmpassword)" ssh -o StrictHostKeyChecking=no azureuser@$VM_IP "
                 docker login -u dhanu0395 -p $(dockerPassword)
                 docker pull dhanu0395/dockervm:latest
-                docker run -d -p 80:80 myacr.azurecr.io/myapp:latest"
+                docker run -d -p 80:80 dhanu0395/dockervm:latest"
             displayName: Run Docker Container          
 
