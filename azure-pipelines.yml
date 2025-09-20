@@ -81,7 +81,7 @@ stages:
             name: FetchSecrets
             inputs:
               azureSubscription: 'DjAzureSPNConnection'
-              KeyVaultName: 'myKeyVault'
+              KeyVaultName: 'dhanu-keyvault'
               SecretsFilter: 'vmpassword,dockerPassword'
               RunAsPreJob: true
           - script: |
