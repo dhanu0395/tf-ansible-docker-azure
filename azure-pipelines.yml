@@ -4,6 +4,7 @@ pool:
   name: LinuxPool
 
 variables:
+  - group: dhanu-keyvault
   TF_WORKING_DIR: 'virtualMachine'
 
 stages:
@@ -21,7 +22,7 @@ stages:
               backendServiceArm: 'DjAzureSPNConnection'
               backendAzureRmStorageAccountName: 'dhanustorage03'
               backendAzureRmContainerName: 'dhanucontainer'
-              backendAzureRmKey: 'vmstorage.tfstate'
+              backendAzureRmKey: 'vmstorage123.tfstate'
           - task: TerraformTask@5
             inputs:
               provider: 'azurerm'
@@ -34,6 +35,7 @@ stages:
               command: 'apply'
               workingDirectory: '$(TF_WORKING_DIR)'
               environmentServiceNameAzureRM: 'DjAzureSPNConnection'
+              
           - script: |
               cd $(TF_WORKING_DIR)
               mkdir -p /home/dhanu/shared/ansible
@@ -50,5 +52,36 @@ stages:
           - script: |
               export ANSIBLE_HOST_KEY_CHECKING=False
               ansible-playbook -i /home/dhanu/shared/ansible/inventory.ini ansible/playbook.yml
-            displayName: "Run Ansible Playbook"       
+            displayName: "Run Ansible Playbook"
+
+  - stage: Docker
+    dependsOn: Ansible
+    jobs:
+      - job: BuildPush
+        pool:
+          name: LinuxPool
+          steps:
+            - task: Docker@2
+              inputs:
+                containerRegistry: 'docker0395'
+                repository: 'dhanu0395/dockervm'
+                command: 'buildAndPush'
+                Dockerfile: '$(Build.SourcesDirectory)/docker/Dockerfile'
+                buildContext: '$(Build.SourcesDirectory)'
+                tags: |
+                  latest   
+
+  - stage: Deploy
+    dependsOn: Docker
+    jobs:
+      - job: DeployApp
+        pool:
+          name: LinuxPool
+          steps:
+            - script: |
+                sshpass -p '$(vmpassword)' ssh -o StrictHostKeyChecking=no azureuser@$(terraform output -raw vm_ip) "
+                  docker login -u dhanu0395 -p $(dockerPassword)
+                  docker pull dhanu0395/dockervm:latest
+                  docker run -d -p 80:80 myacr.azurecr.io/myapp:latest"
+              displayName: Run Docker Container          
 
